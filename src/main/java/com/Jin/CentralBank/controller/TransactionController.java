@@ -1,5 +1,6 @@
 package com.Jin.CentralBank.controller;
 
+import java.util.List;
 import com.Jin.CentralBank.model.Account;
 import com.Jin.CentralBank.model.Transaction;
 import com.Jin.CentralBank.model.User;
@@ -34,63 +35,63 @@ public class TransactionController {
     @PostMapping("/transfer")
     @Transactional
     public ResponseEntity<String> transferFunds(@RequestBody TransferRequest transferRequest, Authentication authentication) {
-        System.out.println("🔄 Rozpoczynam transfer...");
+        System.out.println("🔄 Starting transfer...");
 
-        // Pobieramy użytkownika (nadawcę) z sesji
+        // Retrieve sender from session
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         Optional<User> senderOpt = userRepository.findByUsername(userDetails.getUsername());
         if (senderOpt.isEmpty()) {
-            System.out.println("❌ Błąd: Nie znaleziono użytkownika.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Nie znaleziono użytkownika.");
+            System.out.println("❌ Error: User not found.");
+            return ResponseEntity.badRequest().body("❌ Error: User not found.");
         }
         User sender = senderOpt.get();
 
-        // Pobieramy konto nadawcy
+        // Retrieve sender's account
         Optional<Account> senderAccountOpt = accountRepository.findByUser(sender);
         if (senderAccountOpt.isEmpty()) {
-            System.out.println("❌ Błąd: Brak konta bankowego.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Brak konta bankowego.");
+            System.out.println("❌ Error: No bank account found.");
+            return ResponseEntity.badRequest().body("❌ Error: No bank account found.");
         }
         Account senderAccount = senderAccountOpt.get();
 
-        // Pobieramy odbiorcę
+        // Retrieve recipient
         Optional<User> receiverOpt = userRepository.findByUsername(transferRequest.getRecipientUsername());
         if (receiverOpt.isEmpty()) {
-            System.out.println("❌ Błąd: Nie znaleziono odbiorcy.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Nie znaleziono odbiorcy.");
+            System.out.println("❌ Error: Recipient not found.");
+            return ResponseEntity.badRequest().body("❌ Error: Recipient not found.");
         }
         User receiver = receiverOpt.get();
 
-        // Pobieramy konto odbiorcy
+        // Retrieve recipient's account
         Optional<Account> receiverAccountOpt = accountRepository.findByUser(receiver);
         if (receiverAccountOpt.isEmpty()) {
-            System.out.println("❌ Błąd: Odbiorca nie ma konta.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Odbiorca nie ma konta.");
+            System.out.println("❌ Error: Recipient has no bank account.");
+            return ResponseEntity.badRequest().body("❌ Error: Recipient has no bank account.");
         }
         Account receiverAccount = receiverAccountOpt.get();
 
-        // Sprawdzenie, czy nadawca i odbiorca to ta sama osoba
+        // Check if sender and recipient are the same
         if (sender.getUsername().equals(transferRequest.getRecipientUsername())) {
-            System.out.println("❌ Błąd: Nie można wysłać przelewu do samego siebie.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Nie można wysłać przelewu do samego siebie.");
+            System.out.println("❌ Error: Cannot send money to yourself.");
+            return ResponseEntity.badRequest().body("❌ Error: Cannot send money to yourself.");
         }
 
-        // Sprawdzamy saldo nadawcy
+        // Check sender's balance
         if (senderAccount.getBalance().compareTo(transferRequest.getAmount()) < 0) {
-            System.out.println("❌ Błąd: Niewystarczające saldo.");
-            return ResponseEntity.badRequest().body("❌ Błąd: Niewystarczające saldo.");
+            System.out.println("❌ Error: Insufficient funds.");
+            return ResponseEntity.badRequest().body("❌ Error: Insufficient funds.");
         }
 
-        // Realizacja transakcji
-        System.out.println("💰 Realizacja przelewu...");
+        // Process transaction
+        System.out.println("💰 Processing transfer...");
         senderAccount.setBalance(senderAccount.getBalance().subtract(transferRequest.getAmount()));
         receiverAccount.setBalance(receiverAccount.getBalance().add(transferRequest.getAmount()));
 
-        // Zapisujemy zmiany
+        // Save changes
         accountRepository.save(senderAccount);
         accountRepository.save(receiverAccount);
 
-        // Zapisujemy transakcję
+        // Save transaction
         Transaction transaction = Transaction.builder()
                 .sender(sender)
                 .receiver(receiver)
@@ -99,7 +100,26 @@ public class TransactionController {
                 .build();
         transactionRepository.save(transaction);
 
-        System.out.println("✅ Przelew wykonany pomyślnie!");
-        return ResponseEntity.ok("✅ Przelew wykonany pomyślnie! " + transferRequest.getAmount() + " PLN do " + transferRequest.getRecipientUsername());
+        System.out.println("✅ Transfer successful!");
+        return ResponseEntity.ok("✅ Transfer successful! " + transferRequest.getAmount() + " PLN to " + transferRequest.getRecipientUsername());
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<?> getTransactionHistory(Authentication authentication) {
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        Optional<User> userOpt = userRepository.findByUsername(userDetails.getUsername());
+
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body("❌ Error: User not found.");
+        }
+
+        User user = userOpt.get();
+        List<Transaction> userTransactions = transactionRepository.findBySenderOrReceiver(user, user);
+
+        if (userTransactions.isEmpty()) {
+            return ResponseEntity.ok("📜 No transactions found.");
+        }
+
+        return ResponseEntity.ok(userTransactions);
     }
 }

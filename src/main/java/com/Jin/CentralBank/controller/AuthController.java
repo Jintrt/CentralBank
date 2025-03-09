@@ -43,72 +43,72 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody User user) {
-        logger.info("🔍 Próba rejestracji użytkownika: {}", user.getUsername());
+        logger.info("🔍 Attempting to register user: {}", user.getUsername());
 
         if (user.getUsername() == null || user.getUsername().isEmpty()) {
-            return ResponseEntity.badRequest().body("❌ Błąd: Nazwa użytkownika jest wymagana.");
+            return ResponseEntity.badRequest().body("❌ Error: Username is required.");
         }
 
         if (user.getPassword() == null || user.getPassword().isEmpty()) {
-            return ResponseEntity.badRequest().body("❌ Błąd: Hasło jest wymagane.");
+            return ResponseEntity.badRequest().body("❌ Error: Password is required.");
         }
 
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            return ResponseEntity.badRequest().body("❌ Błąd: Nazwa użytkownika jest już zajęta.");
+            return ResponseEntity.badRequest().body("❌ Error: Username is already taken.");
         }
 
-        // Szyfrujemy hasło przed zapisaniem
+        // Encrypt the password before saving
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setRole("USER");
         userRepository.save(user);
-        logger.info("✅ Użytkownik {} został zarejestrowany!", user.getUsername());
+        logger.info("✅ User {} has been registered!", user.getUsername());
 
-        // Automatyczne tworzenie konta bankowego z początkowym saldem 1000 PLN
+        // Automatically create a bank account with an initial balance of 1000 PLN
         Account account = new Account();
         account.setUser(user);
-        account.setBalance(new BigDecimal("1000.00")); // Początkowe saldo
+        account.setBalance(new BigDecimal("1000.00")); // Initial balance
         accountRepository.save(account);
-        logger.info("✅ Konto bankowe dla użytkownika {} utworzone.", user.getUsername());
+        logger.info("✅ Bank account for user {} created.", user.getUsername());
 
-        return ResponseEntity.ok("✅ Rejestracja zakończona sukcesem!");
+        return ResponseEntity.ok("✅ Registration successful!");
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody User user) {
-        logger.info("🔍 Próba logowania użytkownika: {}", user.getUsername());
+        logger.info("🔍 Attempting to log in user: {}", user.getUsername());
 
         try {
             Optional<User> dbUserOpt = userRepository.findByUsername(user.getUsername());
             if (dbUserOpt.isEmpty()) {
-                logger.warn("❌ Użytkownik {} nie istnieje w bazie!", user.getUsername());
-                return ResponseEntity.badRequest().body("❌ Błąd: Niepoprawna nazwa użytkownika lub hasło.");
+                logger.warn("❌ User {} does not exist in the database!", user.getUsername());
+                return ResponseEntity.badRequest().body("❌ Error: Invalid username or password.");
             }
             User dbUser = dbUserOpt.get();
 
-            // Sprawdzamy, czy hasło jest poprawne
+            // Check if the password is correct
             if (!passwordEncoder.matches(user.getPassword(), dbUser.getPassword())) {
-                logger.warn("❌ Nieprawidłowe hasło dla użytkownika {}!", user.getUsername());
-                return ResponseEntity.badRequest().body("❌ Błąd: Niepoprawna nazwa użytkownika lub hasło.");
+                logger.warn("❌ Incorrect password for user {}!", user.getUsername());
+                return ResponseEntity.badRequest().body("❌ Error: Invalid username or password.");
             }
 
-            // Autoryzacja użytkownika
+            // Authenticate the user
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword())
             );
 
-            // Generowanie tokena JWT
+            // Generate JWT token
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
             String token = jwtUtil.generateToken(userDetails.getUsername());
-            logger.info("✅ Token JWT wygenerowany dla użytkownika: {}", user.getUsername());
+            logger.info("✅ JWT token generated for user: {}", user.getUsername());
 
             return ResponseEntity.ok(token);
 
         } catch (BadCredentialsException e) {
-            logger.warn("❌ Błędne dane logowania dla użytkownika {}!", user.getUsername());
-            return ResponseEntity.badRequest().body("❌ Błąd: Niepoprawna nazwa użytkownika lub hasło.");
+            logger.warn("❌ Incorrect login credentials for user {}!", user.getUsername());
+            return ResponseEntity.badRequest().body("❌ Error: Invalid username or password.");
         } catch (Exception e) {
-            logger.error("❌ Wystąpił błąd logowania: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body("❌ Błąd serwera. Spróbuj ponownie później.");
+            logger.error("❌ Login error: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("❌ Server error. Please try again later.");
         }
     }
 
